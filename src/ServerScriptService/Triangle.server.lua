@@ -41,7 +41,7 @@ local function Draw3dTriangle(a, b, c)
 	return w1, w2
 end
 
-RunService.Heartbeat:Connect(function()
+RunService.Heartbeat:Connect(function() --- This is just for testing the part with triangles
 	local APart = workspace.A.Position
 	local BPart = workspace.B.Position
 	local CPart = workspace.C.Position
