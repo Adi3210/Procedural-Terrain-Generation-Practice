@@ -31,17 +31,21 @@ local function Draw3dTriangle(a, b, c)
 
 	local height = math.abs(ab:Dot(up))
 
-	local w1 = wedge:Clone()
-	w1.Size = Vector3.new(0, height, math.abs(ab:Dot(back)))
-	w1.CFrame = CFrame.fromMatrix((a + b) / 2, right, up, back)
-	w1.Parent = workspace
+	local W1CFrame = CFrame.fromMatrix((a + b) / 2, right, up, back)
+	local W2CFrame = CFrame.fromMatrix((a + c) / 2, -right, up, -back)
 
-	local w2 = wedge:Clone()
-	w2.Size = Vector3.new(0, height, math.abs(ac:Dot(back)))
-	w2.CFrame = CFrame.fromMatrix((a + c) / 2, -right, up, -back)
-	w2.Parent = workspace
+	local W1Size = Vector3.new(0, height, math.abs(ab:Dot(back)))
+	local W2Size = Vector3.new(0, height, math.abs(ac:Dot(back)))
 
-	return w1, w2
+	return W1CFrame, W2CFrame, W1Size, W2Size
+end
+
+local function CreateWedge(cframe, size)
+	local wedge = wedge:Clone()
+	wedge.CFrame = cframe
+	wedge.Size = size
+	wedge.Parent = workspace
+	return wedge
 end
 
 local function GetHeight(ChunkPosX, ChunkPosZ, x, z)
@@ -59,14 +63,14 @@ local function GetPosition(ChunkPosX, ChunkPosZ, x, z)
 	)
 end
 
-------Modules-----
+------**Modules**-----
 local Chunk = {}
 Chunk.__index = Chunk
 
 Chunk.WidthSizeX = X * WidthScale
 Chunk.WidthSizeZ = Z * WidthScale
 
-function Chunk.new(ChunkPosX, ChunkPosZ)
+function Chunk.new(ChunkPosX, ChunkPosZ, CachedTriangles)
 	local self = setmetatable({}, Chunk)
 
 	self.instances = {}
@@ -91,8 +95,30 @@ function Chunk.new(ChunkPosX, ChunkPosZ)
 			local c = PositionGrid[x][z + 1]
 			local d = PositionGrid[x + 1][z + 1]
 
-			local WedgeA, WedgeB = Draw3dTriangle(a, b, c) -- Draw one triangle
-			local WedgeC, WedgeD = Draw3dTriangle(b, c, d) -- Draw the other triangle
+			local WedgeA, WedgeB, WedgeC, WedgeD
+
+			if #CachedTriangles > 0 then -- If there are cached triangles
+				----Reuse Cached Triangles----
+				WedgeA, WedgeB = table.remove(CachedTriangles, 1), table.remove(CachedTriangles, 1)
+				WedgeC, WedgeD = table.remove(CachedTriangles, 1), table.remove(CachedTriangles, 1)
+
+				--------Update the Triangle Positions and Sizes--------
+				local W1CFrame, W2CFrame, W1Size, W2Size = Draw3dTriangle(a, b, c)
+				local W3CFrame, W4CFrame, W3Size, W4Size = Draw3dTriangle(b, c, d)
+
+				WedgeA.CFrame, WedgeB.CFrame = W1CFrame, W2CFrame
+				WedgeC.CFrame, WedgeD.CFrame = W3CFrame, W4CFrame
+
+				WedgeA.Size, WedgeB.Size = W1Size, W2Size
+				WedgeC.Size, WedgeD.Size = W3Size, W4Size
+			else
+				--------Create New Triangles--------
+				local w1CFrame, w2CFrame, w1Size, w2Size = Draw3dTriangle(a, b, c) -- Get the CFrame and Size of the triangle
+				local w3CFrame, w4CFrame, w3Size, w4Size = Draw3dTriangle(b, c, d) -- Get the CFrame and Size of the triangle
+
+				WedgeA, WedgeB = CreateWedge(w1CFrame, w1Size), CreateWedge(w2CFrame, w2Size) -- Create the triangle
+				WedgeC, WedgeD = CreateWedge(w3CFrame, w3Size), CreateWedge(w4CFrame, w4Size) -- Create the triangle
+			end
 
 			local WedgesTable = { WedgeA, WedgeB, WedgeC, WedgeD } -- Put the wedges in a table
 			for _, WedgeChild in ipairs(WedgesTable) do -- Loop through the table
@@ -104,9 +130,9 @@ function Chunk.new(ChunkPosX, ChunkPosZ)
 	return self
 end
 
-function Chunk:Destroy()
+function Chunk:Destroy(CachedTriangles)
 	for _, instance in ipairs(self.instances) do
-		instance:Destroy()
+		table.insert(CachedTriangles, instance) -- Insert the wedges into the cached triangles table instead of destroying them
 	end
 
 	self.instances = {}

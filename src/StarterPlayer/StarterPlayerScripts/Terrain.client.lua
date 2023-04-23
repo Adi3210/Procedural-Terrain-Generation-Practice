@@ -16,9 +16,10 @@ local CenterPosZ
 local Chunks = {}
 local ChunkCount = 0
 local FastLoad = true
+local CachedTriangles = {} -- Cache triangles
 
 -------Functions--------
-local function ChunkWait()
+local function ChunkWait() -- Wait for the chunk to be created
 	ChunkCount = (ChunkCount + 1) % ChunksLoadedPerTick
 
 	if ChunkCount == 0 and not FastLoad then
@@ -59,7 +60,8 @@ local function MakeChunks()
 	for x = CenterPosX - RenderDistance, CenterPosX + RenderDistance do
 		for z = CenterPosZ - RenderDistance, CenterPosZ + RenderDistance do
 			if not DoesChunkExist(x, z) then
-				table.insert(Chunks, ChunkModule.new(x, z))
+				local NewChunk = ChunkModule.new(x, z, CachedTriangles)
+				table.insert(Chunks, NewChunk)
 				ChunkWait()
 			end
 		end
@@ -74,8 +76,8 @@ local function DestroyChunks()
 		local Chunk = Chunks[i]
 
 		if IsChunkOutOfRange(Chunk) then
-			Chunk:Destroy()
-			ChunkWait()
+			Chunk:Destroy(CachedTriangles) ---This now adds the triangles to the CachedTriangles table
+			ChunkWait() -- Wait for the chunk to be destroyed
 
 			Chunks[i] = nil
 		end
