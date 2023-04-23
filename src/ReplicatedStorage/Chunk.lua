@@ -11,6 +11,14 @@ local WidthScale = 15
 local HeightScale = 100
 local TerrainSmoothness = 20
 
+------Tables------
+local TerrainHeightColors = {
+	[-50] = Color3.fromRGB(216, 204, 157), -- sand yellow
+	[-10] = Color3.fromRGB(72, 113, 58), -- grassy green
+	[0] = Color3.fromRGB(72, 113, 58), -- grassy green
+	[75] = Color3.fromRGB(76, 80, 86), -- stone grey mountain
+}
+
 -----Functions-----
 -----**Function to draw a triangle**-----
 local function Draw3dTriangle(a, b, c)
@@ -40,27 +48,96 @@ local function Draw3dTriangle(a, b, c)
 	return W1CFrame, W2CFrame, W1Size, W2Size
 end
 
+-----**Function to create a wedge**-----
 local function CreateWedge(cframe, size)
-	local wedge = wedge:Clone()
-	wedge.CFrame = cframe
-	wedge.Size = size
-	wedge.Parent = workspace
-	return wedge
+	local wedgeInstance = wedge:Clone()
+	wedgeInstance.CFrame = cframe
+	wedgeInstance.Size = size
+	wedgeInstance.Parent = workspace
+	return wedgeInstance
 end
 
+-----**Function to get the height of a point**-----
 local function GetHeight(ChunkPosX, ChunkPosZ, x, z)
-	return math.noise(
+	-----Get the height of the terrain using Perlin Noise-----
+	local TerrainHeight = math.noise(
 		(X / TerrainSmoothness * ChunkPosX) + x / TerrainSmoothness,
 		(Z / TerrainSmoothness * ChunkPosZ) + z / TerrainSmoothness
 	) * HeightScale
+
+	-------Detect if the terrain is too high or too low and smooth it out-------
+	if TerrainHeight > 20 then
+		local Difference = TerrainHeight - 20
+		TerrainHeight += (Difference * 0.5)
+	end
+
+	if TerrainHeight < -20 then
+		local Difference = TerrainHeight + 20
+		TerrainHeight += (Difference * 0.5)
+	end
+
+	return TerrainHeight
 end
 
+-----**Function to get the position of a point**-----
 local function GetPosition(ChunkPosX, ChunkPosZ, x, z)
 	return Vector3.new(
 		ChunkPosX * X * WidthScale + x * WidthScale,
 		GetHeight(ChunkPosX, ChunkPosZ, x, z),
 		ChunkPosZ * Z * WidthScale + z * WidthScale
 	)
+end
+
+-----**Function to paint the wedge**-----
+local function PaintWedge(WedgePaint)
+	local WedgeHeight = WedgePaint.Position.Y
+
+	local Color
+	local LowerColorHeight
+	local HigherColorHeight
+
+	for HeightNum, HeightColor in pairs(TerrainHeightColors) do
+		if WedgeHeight == HeightNum then
+			Color = HeightColor
+			break
+		end
+
+		if (WedgeHeight < HeightNum) and (not HigherColorHeight or HeightNum < HigherColorHeight) then -- If the height is less than the current height and less than the higher color height
+			HigherColorHeight = HeightNum
+		end
+
+		if (WedgeHeight > HeightNum) and (not LowerColorHeight or HeightNum > LowerColorHeight) then -- If the height is greater than the current height and greater than the lower color height
+			LowerColorHeight = HeightNum
+		end
+	end
+
+	if not Color then
+		if HigherColorHeight == nil then
+			Color = TerrainHeightColors[LowerColorHeight]
+		elseif LowerColorHeight == nil then
+			Color = TerrainHeightColors[HigherColorHeight]
+		else
+			local Alpha = (WedgeHeight - LowerColorHeight) / (HigherColorHeight - LowerColorHeight)
+			local LowerColor = TerrainHeightColors[LowerColorHeight]
+			local HigherColor = TerrainHeightColors[HigherColorHeight]
+
+			Color = LowerColor:Lerp(HigherColor, Alpha)
+		end
+	end
+
+	WedgePaint.Material = Enum.Material.Grass
+	WedgePaint.Color = Color
+end
+
+local function AddWater(Chunk)
+	local ChunkCFrame = CFrame.new((Chunk.x + 0.5) * Chunk.WidthSizeX, -70, (Chunk.z + 0.5) * Chunk.WidthSizeZ)
+
+	local Size = Vector3.new(Chunk.WidthSizeX, 90, Chunk.WidthSizeZ)
+
+	workspace.Terrain:FillBlock(ChunkCFrame, Size, Enum.Material.Water)
+
+	Chunk.WaterCFrame = ChunkCFrame
+	Chunk.WaterSize = Size
 end
 
 ------**Modules**-----
@@ -121,11 +198,18 @@ function Chunk.new(ChunkPosX, ChunkPosZ, CachedTriangles)
 			end
 
 			local WedgesTable = { WedgeA, WedgeB, WedgeC, WedgeD } -- Put the wedges in a table
+
+			for _, Wedges in ipairs(WedgesTable) do -- Loop through the table
+				PaintWedge(Wedges) -- Paint the wedges
+			end
+
 			for _, WedgeChild in ipairs(WedgesTable) do -- Loop through the table
 				table.insert(self.instances, WedgeChild) -- Insert the wedges into the instances table
 			end
 		end
 	end
+
+	AddWater(self)
 
 	return self
 end
@@ -136,6 +220,8 @@ function Chunk:Destroy(CachedTriangles)
 	end
 
 	self.instances = {}
+
+	workspace.Terrain:FillBlock(self.WaterCFrame, self.WaterSize, Enum.Material.Air)
 end
 
 return Chunk
