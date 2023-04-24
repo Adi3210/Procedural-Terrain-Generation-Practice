@@ -1,6 +1,7 @@
 ---------Services--------
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
 
 ---------Modules---------
 local ChunkModule = require(ReplicatedStorage.Chunk)
@@ -8,17 +9,23 @@ local ChunkModule = require(ReplicatedStorage.Chunk)
 ---------Object Variables--------
 local RenderDistance = 12
 local ChunksLoadedPerTick = 4
-local Camera = workspace.CurrentCamera
+-- local Camera = workspace.CurrentCamera
 
 --------Math Variables--------
 local CenterPosX
 local CenterPosZ
 local Chunks = {}
 local ChunkCount = 0
-local FastLoad = true
 local CachedTriangles = {} -- Cache triangles
 
+-------Loading Variables--------
+local FastLoad = true
+local TerrainIntialized = false
+local UpdateInterval = 0.5
+local TimeSinceLastUpdate = 0
+
 -------Functions--------
+
 local function ChunkWait() -- Wait for the chunk to be created
 	ChunkCount = (ChunkCount + 1) % ChunksLoadedPerTick
 
@@ -27,15 +34,25 @@ local function ChunkWait() -- Wait for the chunk to be created
 	end
 end
 
-local function UpdateCenterPosFromCamera()
-	local CamPosition = Camera.CFrame.Position -- Get the camera's position
+local function UpdateCenterPosFromPlayerHead(player)
+	local Character = player.Character
+	if not Character then
+		return
+	end
 
-	CenterPosX = math.floor(CamPosition.X / ChunkModule.WidthSizeX)
-	CenterPosZ = math.floor(CamPosition.Z / ChunkModule.WidthSizeZ)
+	local Head = Character:FindFirstChild("Head")
+	if not Head then
+		return
+	end
+
+	local HeadPosition = Head.Position
+
+	CenterPosX = math.floor(HeadPosition.X / ChunkModule.WidthSizeX)
+	CenterPosZ = math.floor(HeadPosition.Z / ChunkModule.WidthSizeZ)
 end
 
 local function DoesChunkExist(x, z)
-	for i, Chunk in pairs(Chunks) do
+	for _, Chunk in pairs(Chunks) do
 		if Chunk.x == x and Chunk.z == z then
 			return true -- If the chunk exists, return true
 		end
@@ -57,6 +74,10 @@ local function IsChunkOutOfRange(Chunk)
 end
 
 local function MakeChunks()
+	if not CenterPosX or not CenterPosZ then
+		return
+	end
+
 	for x = CenterPosX - RenderDistance, CenterPosX + RenderDistance do
 		for z = CenterPosZ - RenderDistance, CenterPosZ + RenderDistance do
 			if not DoesChunkExist(x, z) then
@@ -99,15 +120,24 @@ local function DestroyChunks()
 	end
 end
 
---------**Loop To Create Chunks**--------
-local updateInterval = 0.5
-local timeSinceLastUpdate = 0
+-----**Initialize Terrain**-----
+local function InitializeTerrain()
+	MakeChunks()
+
+	TerrainIntialized = true
+end
 
 local function MainLoop(deltaTime)
-	timeSinceLastUpdate = timeSinceLastUpdate + deltaTime
+	if not TerrainIntialized then
+		return
+	end
 
-	if timeSinceLastUpdate >= updateInterval then
-		UpdateCenterPosFromCamera()
+	TimeSinceLastUpdate = TimeSinceLastUpdate + deltaTime
+
+	if TimeSinceLastUpdate >= UpdateInterval then
+		for _, player in pairs(Players:GetPlayers()) do
+			UpdateCenterPosFromPlayerHead(player)
+		end
 
 		DestroyChunks()
 
@@ -115,8 +145,10 @@ local function MainLoop(deltaTime)
 
 		FastLoad = false
 
-		timeSinceLastUpdate = 0
+		TimeSinceLastUpdate = 0
 	end
 end
 
+-------**Events**-------
+Players.PlayerAdded:Connect(InitializeTerrain)
 RunService.Heartbeat:Connect(MainLoop)

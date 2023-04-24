@@ -281,11 +281,12 @@ function Chunk:Destroy(CachedTriangles)
 		table.insert(InstancePool, instance)
 	end
 
+	self.instances = {}
+
 	for _, CachedTriangleVar in ipairs(self.CachedTriangles) do
 		table.insert(CachedTriangles, CachedTriangleVar) -- Insert the triangles into the cached triangles table
 	end
 
-	self.instances = {}
 	self.CachedTriangles = {} -- Clear the cached triangles table
 
 	workspace.Terrain:FillBlock(self.WaterCFrame, self.WaterSize, Enum.Material.Air)
