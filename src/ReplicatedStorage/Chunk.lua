@@ -1,3 +1,6 @@
+------Services------
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
 ----Create Wedge Part----
 local wedge = Instance.new("WedgePart")
 wedge.Anchored = true
@@ -9,7 +12,17 @@ local X = 4
 local Z = 4
 local WidthScale = 15
 local HeightScale = 100
+
+----Terrain Variables----
 local TerrainSmoothness = 20
+local MinimumTreeHeight = -15
+local MaximumTreeHeight = 30
+local TreeDensity = 0.2 -- 0.2 = 20% chance of a tree spawning
+
+----Seed Variables----
+-- Generate a random seed
+local RandomGen = Random.new()
+local SEED = RandomGen:NextInteger(1, 10000) -- You can adjust the range of the random seed as needed
 
 ------Tables------
 local TerrainHeightColors = {
@@ -18,7 +31,7 @@ local TerrainHeightColors = {
 	[0] = Color3.fromRGB(72, 113, 58), -- grassy green
 	[75] = Color3.fromRGB(76, 80, 86), -- stone grey mountain
 }
-
+local InstancePool = {}
 -----Functions-----
 -----**Function to draw a triangle**-----
 local function Draw3dTriangle(a, b, c)
@@ -62,7 +75,8 @@ local function GetHeight(ChunkPosX, ChunkPosZ, x, z)
 	-----Get the height of the terrain using Perlin Noise-----
 	local TerrainHeight = math.noise(
 		(X / TerrainSmoothness * ChunkPosX) + x / TerrainSmoothness,
-		(Z / TerrainSmoothness * ChunkPosZ) + z / TerrainSmoothness
+		(Z / TerrainSmoothness * ChunkPosZ) + z / TerrainSmoothness,
+		SEED
 	) * HeightScale
 
 	-------Detect if the terrain is too high or too low and smooth it out-------
@@ -140,6 +154,51 @@ local function AddWater(Chunk)
 	Chunk.WaterSize = Size
 end
 
+local function AddTrees(Chunk)
+	local PositionGrid = Chunk.PositionGrid
+	local Instances = Chunk.instances
+	local ChunkPosX = Chunk.x
+	local ChunkPosZ = Chunk.z
+
+	for x = 0, X - 1 do
+		for z = 0, Z - 1 do
+			local Position = PositionGrid[x][z]
+
+			if Position.Y >= MinimumTreeHeight and Position.Y <= MaximumTreeHeight then
+				math.randomseed(x * (ChunkPosX + SEED) + z * (ChunkPosZ + SEED)) -- Set the seed to the position of the vertex
+
+				if math.random() < TreeDensity then
+					local Tree
+
+					if #InstancePool > 0 then
+						Tree = table.remove(InstancePool, 1)
+					else
+						Tree = ReplicatedStorage.Tree:Clone()
+					end
+
+					for _, child in pairs(Tree.Feuilles:GetChildren()) do
+						if child:IsA("BasePart") then
+							child.Color = Color3.fromRGB(
+								75 + math.random(-25, 25),
+								151 + math.random(-25, 25),
+								75 + math.random(-25, 25)
+							)
+						end
+					end
+
+					local TreeCFrame = CFrame.new(Position)
+						* CFrame.new(math.random() * math.random(-10, 10), 0, math.random() * math.random(-10, 10))
+						* CFrame.Angles(0, 2 * math.pi * math.random(), 0)
+
+					Tree:PivotTo(TreeCFrame)
+					Tree.Parent = workspace
+					table.insert(Instances, Tree)
+				end
+			end
+		end
+	end
+end
+
 ------**Modules**-----
 local Chunk = {}
 Chunk.__index = Chunk
@@ -151,11 +210,13 @@ function Chunk.new(ChunkPosX, ChunkPosZ, CachedTriangles)
 	local self = setmetatable({}, Chunk)
 
 	self.instances = {}
+	self.CachedTriangles = {}
 	self.x = ChunkPosX
 	self.z = ChunkPosZ
+	self.PositionGrid = {}
 
 	-----**Create position Grid With Perlin Noise**-----
-	local PositionGrid = {}
+	local PositionGrid = self.PositionGrid
 
 	for x = 0, X do
 		PositionGrid[x] = {}
@@ -204,22 +265,28 @@ function Chunk.new(ChunkPosX, ChunkPosZ, CachedTriangles)
 			end
 
 			for _, WedgeChild in ipairs(WedgesTable) do -- Loop through the table
-				table.insert(self.instances, WedgeChild) -- Insert the wedges into the instances table
+				table.insert(self.CachedTriangles, WedgeChild) -- Insert the wedges into the instances table
 			end
 		end
 	end
 
 	AddWater(self)
+	AddTrees(self)
 
 	return self
 end
 
 function Chunk:Destroy(CachedTriangles)
 	for _, instance in ipairs(self.instances) do
-		table.insert(CachedTriangles, instance) -- Insert the wedges into the cached triangles table instead of destroying them
+		table.insert(InstancePool, instance)
+	end
+
+	for _, CachedTriangleVar in ipairs(self.CachedTriangles) do
+		table.insert(CachedTriangles, CachedTriangleVar) -- Insert the triangles into the cached triangles table
 	end
 
 	self.instances = {}
+	self.CachedTriangles = {} -- Clear the cached triangles table
 
 	workspace.Terrain:FillBlock(self.WaterCFrame, self.WaterSize, Enum.Material.Air)
 end

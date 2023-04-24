@@ -113,9 +113,9 @@ local function MainLoop(deltaTime)
 
 		MakeChunks()
 
-		timeSinceLastUpdate = 0
-
 		FastLoad = false
+
+		timeSinceLastUpdate = 0
 	end
 end
 
