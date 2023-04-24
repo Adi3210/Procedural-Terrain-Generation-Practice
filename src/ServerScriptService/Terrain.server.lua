@@ -9,6 +9,7 @@ local ChunkModule = require(ReplicatedStorage.Chunk)
 ---------Object Variables--------
 local RenderDistance = 12
 local ChunksLoadedPerTick = 4
+local ChunkRequestEvent = ReplicatedStorage:WaitForChild("RequestChunkData")
 -- local Camera = workspace.CurrentCamera
 
 --------Math Variables--------
@@ -152,3 +153,32 @@ end
 -------**Events**-------
 Players.PlayerAdded:Connect(InitializeTerrain)
 RunService.Heartbeat:Connect(MainLoop)
+
+ChunkRequestEvent.OnServerEvent:Connect(function(player)
+	local playerCharacter = player.Character
+	if not playerCharacter then
+		return
+	end
+
+	local playerHead = playerCharacter:FindFirstChild("Head")
+	if not playerHead then
+		return
+	end
+
+	UpdateCenterPosFromPlayerHead(player)
+	DestroyChunks()
+	MakeChunks()
+
+	local chunksData = {}
+	for _, chunk in ipairs(Chunks) do
+		table.insert(chunksData, {
+			x = chunk.x,
+			z = chunk.z,
+			instances = chunk.instances,
+			waterCFrame = chunk.WaterCFrame,
+			waterSize = chunk.WaterSize,
+		})
+	end
+
+	ChunkRequestEvent:FireClient(player, chunksData)
+end)
